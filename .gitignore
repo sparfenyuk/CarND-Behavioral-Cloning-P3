@@ -1,0 +1,4 @@
+*.zip
+data*
+mac_sim.app
+model.h5
