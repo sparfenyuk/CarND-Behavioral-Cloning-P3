@@ -15,32 +15,35 @@ ap.add_argument("-e", "--epochs", type=int, default=2,
 args = vars(ap.parse_args())
 
 DATA_FOLDER = args['data']
-lines = []
-with open(DATA_FOLDER + '/driving_log.csv') as csvfile:
-    reader = csv.reader(csvfile)
-    for line in reader:
-        lines.append(line)
-
-images = []
-measurements = []
-
-print("Preparing data...")
-
 offset = args["offset"] # for DEBUG purposes
 
+def load_logs():
+    global DATA_FOLDER
+    with open(DATA_FOLDER + '/driving_log.csv') as csvfile:
+        reader = csv.reader(csvfile)
+        return [line for line in reader]
+
+def preprocess(image):
+    return image
+
+def load_image(source_path):
+    image = cv2.imread(source_path)
+    if image is None:
+        raise Exception("Probably you've got broken dataset")
+    return preprocess(image)
+
 """Load images from DATA_FOLDER"""
-for line in lines[::offset]:
-    source_path = line[0]
-    filename = source_path.split('/')[-1]
-    current_path = DATA_FOLDER + '/IMG/' + filename
-    image = cv2.imread(current_path)
-    images.append(image)
-    measurement = float(line[3])
-    measurements.append(measurement)
+def load_data(lines):
+    images, measurements = [],[]
+    for line in lines[::offset]:
+        image_l = load_image(line[0])
+        images.append(image_l)
+        measurement = float(line[3])
+        measurements.append(measurement)
+    return images, measurements
 
 """Augment images: flip them horizontally"""
-def run_augmentation():
-    global images, measurements
+def run_augmentation(images, measurements):
     aug_images = []
     aug_measurements = []
     for image, measurement in zip(images, measurements):
@@ -51,7 +54,11 @@ def run_augmentation():
     images += aug_images
     measurements += aug_measurements
 
-run_augmentation()
+print("Preparing data...")
+lines = load_logs()
+images,measurements = load_data(lines)
+run_augmentation(images, measurements)
+
 
 """Setup training data"""
 X_train = np.array(images)
@@ -72,7 +79,7 @@ model.add(Lambda(lambda x: x/255. - .5, input_shape=(160, 320, 3)))
 model.add(Convolution2D(6,5,5, activation='relu'))
 model.add(MaxPooling2D())
 model.add(Dropout(0.5))
-model.add(Convolution2D(6,5,5, activation='relu'))
+model.add(Convolution2D(24,5,5, activation='relu'))
 model.add(MaxPooling2D())
 model.add(Dropout(0.5))
 model.add(Flatten())
@@ -83,4 +90,9 @@ model.add(Dense(1))
 model.compile(loss='mse', optimizer='adam')
 model.fit(X_train, y_train, validation_split=.2, shuffle=True, nb_epoch=EPOCHS)
 
-model.save('model.h5')
+import os
+import datetime
+
+model_name = "model-{}.h5".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+model.save(model_name)
+os.symlink(model_name, 'model.h5')
