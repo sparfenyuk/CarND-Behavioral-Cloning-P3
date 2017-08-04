@@ -32,14 +32,20 @@ def load_image(source_path):
         raise Exception("Probably you've got broken dataset")
     return preprocess(image)
 
+STEERING_CORRECTION = 0.2
+
 """Load images from DATA_FOLDER"""
 def load_data(lines):
     images, measurements = [],[]
+    correction = STEERING_CORRECTION
     for line in lines[::offset]:
-        image_l = load_image(line[0])
-        images.append(image_l)
+        for i in range(3):
+            image = load_image(line[i])
+            images.append(image)
         measurement = float(line[3])
-        measurements.append(measurement)
+        measurements += [measurement,
+                         measurement + STEERING_CORRECTION,
+                         measurement - STEERING_CORRECTION];
     return images, measurements
 
 """Augment images: flip them horizontally"""
