@@ -75,13 +75,14 @@ print("Done. {} images loaded".format(X_train.shape[0]))
 
 from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout
-from keras.layers.convolutional import Convolution2D
+from keras.layers.convolutional import Convolution2D, Cropping2D
 from keras.layers.pooling import MaxPooling2D
 from keras.callbacks import EarlyStopping, TensorBoard
 """Create our model"""
 """LeNet architecture"""
 model = Sequential()
-model.add(Lambda(lambda x: x/255. - .5, input_shape=(160, 320, 3)))
+model.add(Cropping2D(cropping=((50,30), (0,0)), input_shape=(160,320,3)))
+model.add(Lambda(lambda x: x/255. - .5))
 model.add(Convolution2D(6,5,5, activation='relu'))
 model.add(MaxPooling2D())
 model.add(Dropout(0.5))
