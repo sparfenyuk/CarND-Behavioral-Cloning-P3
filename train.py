@@ -77,7 +77,7 @@ from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout
 from keras.layers.convolutional import Convolution2D
 from keras.layers.pooling import MaxPooling2D
-
+from keras.callbacks import EarlyStopping, TensorBoard
 """Create our model"""
 """LeNet architecture"""
 model = Sequential()
@@ -94,11 +94,24 @@ model.add(Dense(84, activation='relu'))
 model.add(Dense(1))
 
 model.compile(loss='mse', optimizer='adam')
-model.fit(X_train, y_train, validation_split=.2, shuffle=True, nb_epoch=EPOCHS)
+
+model.fit(X_train, y_train, validation_split=.2,
+          shuffle=True, nb_epoch=EPOCHS,
+          callbacks=[
+            # EarlyStopping(min_delta=0.0001),
+            # TensorBoard(),
+          ])
+
 
 import os
 import datetime
 
 model_name = "model-{}.h5".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 model.save(model_name)
-os.symlink(model_name, 'model.h5')
+print('Model saved to ' + model_name)
+symlink_name = 'model.h5'
+try:
+    os.remove(symlink_name)
+except OSError:
+    pass
+os.symlink(model_name, symlink_name)
