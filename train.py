@@ -2,20 +2,21 @@ import csv
 import cv2
 import numpy as np
 import argparse
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--data", type=str, default='./data',
 	help="(optional) folder where data images are located")
 ap.add_argument("-l", "--load-model", type=int, default=-1,
 	help="(optional) whether or not pre-trained model should be loaded")
-ap.add_argument("-i", "--offset", type=int, default=1,
-	help="(optional) read images with offset, convenient for debugging")
+ap.add_argument("-a", "--augment", type=int, default=1,
+	help="(optional) whether or not augment images: 0,1")
 ap.add_argument("-e", "--epochs", type=int, default=2,
 	help="(optional) read images with offset, convenient for debugging")
 args = vars(ap.parse_args())
 
 DATA_FOLDER = args['data']
-offset = args["offset"] # for DEBUG purposes
 
 def load_logs():
     global DATA_FOLDER
@@ -26,30 +27,35 @@ def load_logs():
 CROP_TOP = 70
 CROP_BOTTOM = 30
 
-def preprocess(image):
-    return image
-
 def load_image(source_path):
     image = cv2.imread(source_path)
     if image is None:
         raise Exception("Probably you've got broken dataset")
-    return preprocess(image)
+    return image
 
 STEERING_CORRECTION = 0.4
 
 """Load images from DATA_FOLDER"""
-def load_data(lines):
-    images, measurements = [],[]
-    correction = STEERING_CORRECTION
-    for line in lines[::offset]:
-        for i in range(3):
-            image = load_image(line[i])
-            images.append(image)
-        measurement = float(line[3])
-        measurements += [measurement,
-                         measurement + STEERING_CORRECTION,
-                         measurement - STEERING_CORRECTION];
-    return images, measurements
+def load_data(lines, batch_size, use_augmentation):
+    shuffle(lines)
+    size = len(lines)
+    while 1:
+        correction = STEERING_CORRECTION
+        for start_i in range(0, size, batch_size):
+            images, measurements = [],[]
+            for line in lines[start_i:start_i+batch_size]:
+                for i in range(3):
+                    image = load_image(line[i])
+                    images.append(image)
+                measurement = float(line[3])
+                measurements += [measurement,
+                                 measurement + STEERING_CORRECTION,
+                                 measurement - STEERING_CORRECTION];
+            if use_augmentation:
+                run_augmentation(images, measurements)
+            X_train = np.array(images)
+            y_train = np.array(measurements)
+            yield shuffle(X_train, y_train)
 
 """Augment images: flip them horizontally"""
 def run_augmentation(images, measurements):
@@ -63,18 +69,17 @@ def run_augmentation(images, measurements):
     images += aug_images
     measurements += aug_measurements
 
+
 print("Preparing data...")
 lines = load_logs()
-images,measurements = load_data(lines)
-run_augmentation(images, measurements)
+augment_images = bool(args['augment'])
+train_samples, validation_samples = train_test_split(lines, test_size=0.2)
+train_generator = load_data(train_samples, batch_size=32, use_augmentation=augment_images)
+validation_generator = load_data(validation_samples, batch_size=32, use_augmentation=augment_images)
 
 
 """Setup training data"""
-X_train = np.array(images)
-y_train = np.array(measurements)
 EPOCHS = args["epochs"]
-
-print("Done. {} images loaded".format(X_train.shape[0]))
 
 from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout
@@ -106,7 +111,7 @@ else:
     model.add(Convolution2D(26,5,5,subsample=(2,2),activation='relu'))
     model.add(Convolution2D(48,5,5,subsample=(2,2),activation='relu'))
     model.add(Convolution2D(64,3,3,activation='relu'))
-    # model.add(Convolution2D(64,3,3,activation='relu'))
+    model.add(Convolution2D(64,1,1,activation='relu'))
     model.add(Flatten())
     model.add(Dense(100))
     model.add(Dense(50))
@@ -116,13 +121,15 @@ else:
 
 model.compile(loss='mse', optimizer='adam')
 
-model.fit(X_train, y_train, validation_split=.2,
-          shuffle=True, nb_epoch=EPOCHS,
-          callbacks=[
-            # EarlyStopping(min_delta=0.0001),
-            # TensorBoard(),
-          ])
-
+coef = 2 if augment_images else 1
+model.fit_generator(train_generator,
+                    samples_per_epoch=len(train_samples) * coef,
+                    validation_data=validation_generator,
+                    nb_val_samples=len(validation_samples) * coef,
+                    nb_epoch=EPOCHS, callbacks=[
+                                        EarlyStopping(min_delta=0.0001),
+                                        TensorBoard(),
+                                      ])
 
 import os
 import datetime
