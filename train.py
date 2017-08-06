@@ -72,6 +72,7 @@ def run_augmentation(images, measurements):
 
 print("Preparing data...")
 lines = load_logs()
+print('There are {} records in config'.format(len(lines)))
 augment_images = bool(args['augment'])
 train_samples, validation_samples = train_test_split(lines, test_size=0.2)
 train_generator = load_data(train_samples, batch_size=32, use_augmentation=augment_images)
@@ -121,13 +122,13 @@ else:
 
 model.compile(loss='mse', optimizer='adam')
 
-coef = 2 if augment_images else 1
+coef = (2 if augment_images else 1) * 3 # 3 stands for three front cameras
 model.fit_generator(train_generator,
                     samples_per_epoch=len(train_samples) * coef,
                     validation_data=validation_generator,
                     nb_val_samples=len(validation_samples) * coef,
                     nb_epoch=EPOCHS, callbacks=[
-                                        EarlyStopping(min_delta=0.0001),
+                                        EarlyStopping(min_delta=0.001),
                                         TensorBoard(),
                                       ])
 
